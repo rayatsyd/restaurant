@@ -1,0 +1,545 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+    <link rel="stylesheet" type="text/css" href="{% static 'css/main.css' %}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+
+    <title>Restaurant App</title>
+</head>
+
+<body>
+    <div class="header">
+        <img src="{% static 'images/logo.jpg' %}" alt="Restaurant Logo" class="restaurant-logo">
+        <h1 class="restaurant-name">Mr. StoneBowl</h1>
+        <button id="languageSwitcher" class="language-indicator" aria-label="Change Language">EN</button>
+    </div>
+
+    <!-- Categories Bar -->
+    <div class="categories-bar">
+        <div id="categories" class="categories-content">
+        <!-- Categories will be dynamically added here via JavaScript -->
+        </div>
+    </div>
+
+    <!-- Search Bar and Table Number -->
+    <div class="header-bar">
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="Search dishes...">
+            <button id="searchBtn">🔍</button>
+        </div>
+        <div class="table-label">
+            Table: <span id="tableNumberDisplay">?</span>
+        </div>
+    </div>
+
+    <!-- Main content area -->
+    <div class="main-content">
+
+        <!-- Left Column for Dishes -->
+        <div class="dishes-list">
+
+            <div class="dishes-section" id="dishes">
+                <!-- Individual dish items will be dynamically inserted here -->
+            </div>
+            <p id="noResults" style="display: none; text-align: center;">No results found.</p>
+
+        </div>
+
+        <!-- Right Column for Order Summary -->
+        <div class="order-summary">
+            <h2>Order Summary</h2>
+            <!-- Order details will be dynamically updated here -->
+        </div>
+
+    </div>
+
+
+
+    <!-- The Modal -->
+    <div id="dishModal" class="modal">
+
+        <!-- Modal content -->
+        <div class="modal-content">
+            <span class="close">&times;</span> <!-- The close button -->
+
+            <img src="" id="dishImage" alt="Dish Image" />
+            <h2 id="dishName">Dish Name</h2>
+            <p id="dishIngredients">Ingredients list...</p>
+            <p id="dishPrice">Price: $</p>
+
+            <!-- Quantity adjustment -->
+            <div class="quantity-adjust">
+                <button id="minusBtn">-</button>
+                <span id="quantity">0</span>
+                <button id="plusBtn">+</button>
+            </div>
+
+            <p id="totalAmount">Total: $</p>
+
+            <!-- Action buttons -->
+            <div class="modal-actions">
+                <button id="cancelBtn">Cancel</button>
+                <button id="addToCartBtn">Add to Cart</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Action Bar -->
+    <div class="floating-action-bar">
+        <button id="viewOrdersBtn">View Order</button>
+        <button id="viewCartBtn">View Cart</button>
+    </div>
+
+    <!-- Cart Container -->
+    <div id="cartContainer" class="cart">
+        <div class="cart-content">
+            <span class="close-cart" id="closeCartButton">&times;</span>
+            <h2>Shopping Cart</h2>
+            <!-- Cart items will be dynamically added here -->
+            <div id="cartItems"></div>
+            <!-- Total price -->
+            <div class="cart-total">
+                Total: $<span id="cartTotal">0</span>
+            </div>
+            <!-- Action buttons -->
+            <div class="cart-actions">
+                <button id="checkoutBtn">Checkout</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cart Modal -->
+    <div id="cartModal" class="modal cart-modal">
+      <!-- Modal content -->
+      <div class="modal-content">
+        <span class="close">&times;</span> <!-- The close button -->
+
+        <!-- Cart details -->
+        <h2>Your Cart</h2>
+        <div id="cartModalItems">
+          <!-- Cart items will be dynamically inserted here -->
+        </div>
+        <p id="cartModalTotal">Total: $0.00</p>
+
+        <!-- Action buttons -->
+        <div class="modal-actions">
+            <button id="checkoutBtn">Checkout</button>
+            <button id="viewCartCloseBtn" onclick="closeCartModal()">Close</button>
+        </div>
+      </div>
+    </div>
+
+<script>
+
+    document.getElementById('languageSwitcher').addEventListener('click', function() {
+        // This is where you'll add the functionality to change the language
+        console.log('Language switcher clicked!');
+    });
+
+    // Fetch all categories and render them on the top horizontal bar
+    fetch("/api/categories/")
+        .then(response => response.json())
+        .then(data => {
+            const categoriesDiv = document.getElementById('categories');
+            let defaultCategoryId;
+
+            data.forEach(category => {
+                const categoryDiv = document.createElement('div');
+                categoryDiv.className = "category-item";
+                categoryDiv.textContent = category.name;
+                categoryDiv.addEventListener('click', function() {
+                    fetchDishes(category.id);
+                });
+                categoriesDiv.appendChild(categoryDiv);
+
+                // Check if the current category has priority 1
+                if (category.priority === 1) {
+                    defaultCategoryId = category.id;
+                }
+            });
+
+            // After processing all categories, fetch dishes for the default category
+            if (defaultCategoryId) {
+                fetchDishes(defaultCategoryId);
+            }
+    });
+
+
+    // Function to open the modal and populate it with the dish details
+    function openModal(dish) {
+        document.body.style.overflow = 'hidden';
+        const modal = document.getElementById('dishModal');
+
+        // Convert the unit price to a number for calculation
+        const unitPrice = parseFloat(dish.unit_price.replace(/[^0-9.-]+/g,""));
+
+        // Set default quantity
+        let quantity = 1;
+
+        // Get the elements
+        const quantityElement = document.getElementById('quantity');
+        const totalAmountElement = document.getElementById('totalAmount');
+
+        // Function to update total amount
+        const updateTotalAmount = () => {
+            let totalAmount = quantity * unitPrice;
+            totalAmountElement.textContent = `Total: $${totalAmount.toFixed(2)}`;
+        };
+
+        // Set initial values for quantity and total amount
+        quantityElement.textContent = quantity;
+        updateTotalAmount();
+
+        const minusBtn = document.getElementById('minusBtn');
+        const plusBtn = document.getElementById('plusBtn');
+
+        minusBtn.onclick = function() {
+            if (quantity > 1) {
+                quantity--;
+                quantityElement.textContent = quantity;
+                updateTotalAmount(); // Update total amount on quantity change
+            }
+        };
+
+        plusBtn.onclick = function() {
+            quantity++;
+            quantityElement.textContent = quantity;
+            updateTotalAmount(); // Update total amount on quantity change
+        };
+
+        // Update the modal content based on the current dish
+        document.getElementById('dishImage').src = dish.image_url;
+        document.getElementById('dishName').textContent = dish.name;
+        document.getElementById('dishIngredients').textContent = dish.ingredients;
+        document.getElementById('dishPrice').textContent = `Price: $${unitPrice.toFixed(2)}`;
+
+        // Show the modal
+        modal.style.display = "block";
+
+        // Handle the 'Add to Cart' button
+        document.getElementById('addToCartBtn').onclick = function() {
+
+            // The variables dish and quantity should represent the current selections
+            addToCart(dish, quantity);
+            console.log(cart); // Log the cart to see if the item is there
+            updateCartView();  // Make sure this is called to update the cart
+            closeModal();
+        };
+    }
+
+    function openCartModal() {
+        updateCartView();
+        document.getElementById('cartModal').style.display = 'block';
+        document.body.style.overflow = 'hidden';
+    }
+
+
+    // Make sure the DOM is fully loaded before attaching event listeners
+    document.addEventListener('DOMContentLoaded', (event) => {
+        // Event listener for the dish modal close button
+        document.querySelector('#dishModal .close').addEventListener('click', closeDishModal);
+
+        // Event listener for the cart modal close button
+        document.querySelector('#cartModal .close').addEventListener('click', closeCartModal);
+    });
+
+    // Function to close the modal
+    function closeModal() {
+        document.body.style.overflow = '';
+        const modal = document.getElementById('dishModal');
+        modal.style.display = "none";
+    }
+
+    // Define the closeDishModal function
+    function closeDishModal() {
+        document.getElementById('dishModal').style.display = 'none';
+    }
+
+    function closeCartModal() {
+        document.body.style.overflow = '';
+        document.getElementById('cartModal').style.display = 'none';
+
+    }
+
+    function removeFromCart(itemToRemove) {
+        // Find the index of the item in the cart
+        const index = cart.findIndex(item => item.id === itemToRemove.id);
+        if (index !== -1) {
+            // Remove the item from the cart array
+            cart.splice(index, 1);
+        }
+    }
+
+    // Define the cart array globally or in a scope accessible by all relevant functions
+    let cart = [];
+
+    function updateCartView() {
+        const cartItemsDiv = document.getElementById('cartModalItems');
+        cartItemsDiv.innerHTML = ''; // Clear the cart view
+
+        // Add each cart item to the cart view
+        cart.forEach(item => {
+            const cartItemDiv = document.createElement('div');
+            cartItemDiv.className = 'cart-item';
+
+            // Dish photo
+            const dishPhoto = document.createElement('img');
+            dishPhoto.src = item.image_url;
+            dishPhoto.className = 'cart-item-photo';
+
+            // Details container
+            const detailsDiv = document.createElement('div');
+            detailsDiv.className = 'cart-item-details';
+
+            // Name
+            const itemName = document.createElement('p');
+            itemName.className = 'cart-item-name';
+            itemName.textContent = item.name;
+
+            // Quantity
+            const itemQuantity = document.createElement('p');
+            itemQuantity.className = 'cart-item-quantity';
+            itemQuantity.textContent = `Quantity: ${item.quantity}`;
+
+            // Price
+            const unitPrice = parseFloat(item.unit_price);
+            const itemPrice = document.createElement('p');
+            itemPrice.className = 'cart-item-price';
+            itemPrice.textContent = `@ $${unitPrice.toFixed(2)} each`;
+
+
+
+            // Subtotal
+            const subtotal = item.quantity * unitPrice;
+            const itemSubtotal = document.createElement('p');
+            itemSubtotal.className = 'cart-item-subtotal';
+            itemSubtotal.textContent = `Subtotal: $${subtotal.toFixed(2)}`;
+
+            // Remove item button
+            const removeButton = document.createElement('button');
+            removeButton.className = 'cart-item-remove';
+            removeButton.textContent = 'Remove';
+            removeButton.onclick = function() {
+                // Functionality to remove the item from the cart
+                removeFromCart(item);
+                updateCartView(); // Refresh the cart view
+            };
+
+            // Flex container for image and details
+            const flexContainer = document.createElement('div');
+            flexContainer.className = 'cart-item-flex';
+
+            // Append the image and details to the flex container
+            flexContainer.appendChild(dishPhoto);
+            flexContainer.appendChild(detailsDiv);
+
+            // Append elements to detailsDiv
+            detailsDiv.appendChild(itemName);
+            detailsDiv.appendChild(itemQuantity);
+            detailsDiv.appendChild(itemPrice);
+            detailsDiv.appendChild(itemSubtotal);
+
+            // Append flex container and remove button to cartItemDiv
+            cartItemDiv.appendChild(flexContainer);
+            cartItemDiv.appendChild(removeButton);
+
+            // Append the cart item to the cart items container
+            cartItemsDiv.appendChild(cartItemDiv);
+
+            // Horizontal Line
+            const hr = document.createElement('hr');
+            cartItemsDiv.appendChild(hr);
+        });
+
+
+        // Update the total price using the numeric unitPrice
+        const totalPrice = cart.reduce((total, item) => {
+            const unitPrice = parseFloat(item.unit_price);
+            return total + (item.quantity * unitPrice);
+        }, 0);
+
+        // Update the total price element in the DOM
+        const cartModalTotalElement = document.getElementById('cartModalTotal');
+        cartModalTotalElement.textContent = `Total: $${totalPrice.toFixed(2)}`;
+
+    }
+
+
+
+
+    function addToCart(dish, quantity) {
+        // Check if the dish is already in the cart
+        const existingItem = cart.find(item => item.id === dish.id);
+        if (existingItem) {
+            existingItem.quantity += quantity;
+        } else {
+                cart.push({ ...dish, quantity });
+            }
+                updateCartView();
+    }
+
+    function toggleCart() {
+        const cartContainer = document.getElementById('cartContainer');
+        // Check if the display is none or empty (which means not set or hidden) and toggle accordingly.
+        if (cartContainer.style.display === 'none' || cartContainer.style.display === '') {
+            cartContainer.style.display = 'block';
+        } else {
+            cartContainer.style.display = 'none';
+        }
+    }
+
+
+    // Function to fetch dishes based on category and render them in rows
+    function fetchDishes(categoryId) {
+        fetch(`/api/dishes/?category=${categoryId}`)
+            .then(response => response.json())
+            .then(data => {
+                const dishesDiv = document.getElementById('dishes');
+                dishesDiv.innerHTML = "";  // clear previous dishes
+
+                data.forEach(dish => {
+                    // Create the main dish-item div
+                    const dishItem = document.createElement('div');
+                    dishItem.className = 'dish-item';
+
+                    // Create and add the image
+                    const dishImage = document.createElement('img');
+                    dishImage.src = dish.image_url;
+                    dishImage.alt = dish.name;
+                    dishImage.className = "dish-img";
+                    dishItem.appendChild(dishImage);
+
+                    // Create the container for the text information
+                    const dishInfo = document.createElement('div');
+                    dishInfo.className = 'dish-info';
+
+                    const dishName = document.createElement('h3');
+                    dishName.className = "dish-name";
+                    dishName.textContent = dish.name;
+                    dishInfo.appendChild(dishName);
+
+                    const dishIngredients = document.createElement('p');
+                    dishIngredients.textContent = dish.ingredients;
+                    dishIngredients.className = 'dish-ingredients';
+                    dishInfo.appendChild(dishIngredients);
+
+                    // Create the container for the order info
+                    const orderInfo = document.createElement('div');
+                    orderInfo.className = 'dish-order-info';
+
+                    const dishPrice = document.createElement('span');
+                    dishPrice.className = "dish-price";
+                    dishPrice.textContent = "$" + dish.unit_price;
+                    orderInfo.appendChild(dishPrice);
+
+                    // Create and add the 'Add to cart' button
+                    const addToCartBtn = document.createElement('button');
+                    addToCartBtn.textContent = 'Add to cart';
+                    addToCartBtn.className = 'add-to-cart-btn';
+                    orderInfo.appendChild(addToCartBtn);
+
+                    // Append the orderInfo container to the dishInfo container
+                    dishInfo.appendChild(orderInfo);
+
+                    // Append the dishInfo container to the main dish-item div
+                    dishItem.appendChild(dishInfo);
+
+                    // Finally, append the dish-item to the main container
+                    dishesDiv.appendChild(dishItem);
+
+                    // Create an event listener for each dish item to open the modal
+                    dishItem.addEventListener('click', function() {
+                        openModal(dish);
+                    });
+                });
+
+
+                // When the user clicks on <span> (x), close the modal
+                document.querySelector('.close').onclick = function() {
+                        closeModal();
+                }
+
+                // Handle the 'Cancel' button
+                document.getElementById('cancelBtn').onclick = function() {
+                        closeModal();
+                }
+
+            })
+            .catch(error => {
+            console.error('Error fetching dishes:', error);
+            // Optionally, display a user-friendly message on the UI
+            });
+    }
+
+    // Search function that filters the dishes based on the input value
+    document.getElementById('searchInput').addEventListener('input', function(e) {
+        const dishesDiv = document.getElementById('dishes');
+        const searchQuery = e.target.value.toLowerCase();
+        const dishes = document.querySelectorAll('.dish-item');
+
+        let found = false;
+        dishes.forEach(dish => {
+            const dishName = dish.querySelector('.dish-name').textContent.toLowerCase();
+            if (dishName.includes(searchQuery)) {
+                dish.style.display = '';
+                found = true;
+            } else {
+                dish.style.display = 'none';
+            }
+        });
+
+        // Add or remove the 'search-results' class based on whether a search query is present
+        if (searchQuery) {
+            dishesDiv.classList.add('search-results');
+        } else {
+            dishesDiv.classList.remove('search-results');
+        }
+
+        document.getElementById('noResults').style.display = found ? 'none' : '';
+    });
+
+
+
+    // Close the modal if the user clicks outside of it
+    window.onclick = function(event) {
+        const modal = document.getElementById('dishModal');
+        if (event.target === modal) {
+            closeModal();
+        }
+    };
+
+    // Fetch dishes for the default category when the page loads
+    fetchDishes(1);
+
+
+    // Extract table number and display on search bar
+    document.addEventListener('DOMContentLoaded', function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const tableNumber = urlParams.get('table');
+
+        if (tableNumber) {
+            document.getElementById('tableNumberDisplay').textContent = tableNumber;
+        }
+    });
+
+    // JavaScript related to the floating action bar
+    document.getElementById('viewOrdersBtn').addEventListener('click', function() {
+        // Code to handle view orders
+    });
+
+    document.getElementById('viewCartBtn').addEventListener('click', openCartModal);
+
+    // Event listener for the checkout button (to be implemented)
+    document.getElementById('checkoutBtn').addEventListener('click', function() {
+      // Handle the checkout process
+    });
+
+</script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>QR Code Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .input-container {
+            text-align: center;
+            margin-bottom: 40px; /* Increased padding */
+        }
+
+        .input-container label, .input-container input, .input-container button {
+            font-size: 24px; /* Even larger font size */
+            padding: 15px;   /* Increased padding for better visibility */
+            margin: 10px;    /* Increased space between elements */
+        }
+
+        .input-container input {
+            width: 150px;    /* Increased width of the input field */
+        }
+
+        #qrcode {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        #qrcode img {
+            margin-bottom: 20px;
+        }
+
+        #downloadLink {
+            display: block;
+            margin-top: 20px;
+            font-size: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="input-container">
+        <label for="tableNumber">Table Number:</label>
+        <input type="number" id="tableNumber" min="1">
+        <button onclick="generateQRCode()">Generate QR Code</button>
+    </div>
+    <div id="qrcode"></div>
+    <a id="downloadLink" style="display:none;">Download QR Code</a>
+
+    <!-- Include QRCodeJS library -->
+    <script src="{% static 'js/qrcode.js' %}"></script>
+    <script>
+        function generateQRCode() {
+            const tableNumber = document.getElementById('tableNumber').value;
+            const url = `https://chuchu.pythonanywhere.com?table=${tableNumber}`;
+            const qrcodeContainer = document.getElementById('qrcode');
+            qrcodeContainer.innerHTML = "";
+            const qrCode = new QRCode(qrcodeContainer, {
+                text: url,
+                width: 256,
+                height: 256,
+                colorDark : "#000000",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H
+            });
+
+            // Create downloadable link
+            setTimeout(() => {
+                const img = qrcodeContainer.querySelector('img');
+                const downloadLink = document.getElementById('downloadLink');
+                downloadLink.href = img.src;
+                downloadLink.download = `Table-${tableNumber}-QRCode.png`;
+                downloadLink.textContent = 'Download QR Code';
+                downloadLink.style.display = 'block';
+            }, 300);
+        }
+    </script>
+</body>
+</html>
